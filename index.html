@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEPARTURES</title>
+    <link href="https://fonts.googleapis.com/css2?family=Doto:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: black;
+            color: yellow;
+            font-family: 'Doto', sans-serif;
+            font-weight: 700;
+            text-align: center;
+        }
+        .header-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 90%;
+            margin: 0 auto;
+        }
+        #current-time {
+            position: absolute;
+            right: 5%;
+            font-size: 3em;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            width: 90%;
+            margin: 20px auto;
+        }
+        .panel {
+            padding: 20px;
+            border: 1px solid #ccc;
+            text-align: left;
+        }
+        h2 {
+            margin-top: 0;
+            text-align: center;
+            text-transform: uppercase;
+        }
+        .panel div {
+            font-size: 1.3em;
+        }
+        #service-status {
+            width: 80%;
+            margin: 20px auto;
+            border: 1px solid #ccc;
+            padding: 20px;
+        }
+        #service-status h2 {
+            text-align: center;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr; /* Three columns */
+            gap: 10px;
+        }
+        .line-status {
+            display: flex;
+            align-items: center;
+            padding: 5px;
+            border-radius: 5px;
+            color: black;
+        }
+        .line-status span {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-container">
+        <h1>DEPARTURES</h1>
+        <div id="current-time"></div>
+    </div>
+
+    <div class="container">
+        <div class="panel" id="elizabeth-line">
+            <h2>Elizabeth Line - Platform B</h2>
+            <div id="elizabeth-departures">Loading departures...</div>
+        </div>
+
+        <div class="panel" id="dlr">
+            <h2>DLR</h2>
+            <div id="dlr-departures">Loading departures...</div>
+        </div>
+
+        <div class="panel" id="rail">
+            <h2>Rail</h2>
+            <div id="rail-departures">Loading departures...</div>
+        </div>
+
+        <div class="panel" id="bus">
+            <h2>Bus</h2>
+            <div id="bus-departures">Loading departures...</div>
+        </div>
+    </div>
+
+    <div id="service-status">
+        <h2>Service Status</h2>
+        <div id="status-details">Loading service status...</div>
+    </div>
+
+    <script>
+        const apiBase = "https://api.tfl.gov.uk";
+
+async function fetchDepartures(stopPointId, filterFn, limit, elementId) {
+    const url = `${apiBase}/StopPoint/${stopPointId}/Arrivals`;
+    const container = document.getElementById(elementId);
+    container.innerHTML = "Loading departures...";
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+
+        const departures = data
+            .filter(filterFn)
+            .sort((a, b) => a.timeToStation - b.timeToStation)
+            .slice(0, limit);
+
+        if (departures.length === 0) {
+            container.innerHTML = "<p>No departures scheduled at this time.</p>"; // User friendly message
+        } else {
+            container.innerHTML = departures.map(dep =>
+                `<p>${dep.destinationName} - in ${Math.round(dep.timeToStation / 60)} min</p>`
+            ).join("");
+        }
+    } catch (error) {
+        console.error("Error fetching departures:", error);
+        container.innerHTML = `<p>Error fetching departures: ${error.message}</p>`;
+    }
+}
+        function fetchElizabethLine() {
+            fetchDepartures(
+                "910GWOLWXR",
+                dep => dep.platformName === "B",
+                5,
+                "elizabeth-departures"
+            );
+        }
+
+        function fetchDLR() {
+            fetchDepartures(
+                "940GZZDLWLA",
+                dep => dep.modeName === "dlr",
+                5,
+                "dlr-departures"
+            );
+        }
+
+        function fetchRail() {
+            fetchDepartures(
+                "910GWOLWCHA",
+                dep => dep.modeName === "national-rail",
+                5,
+                "rail-departures"
+            );
+        }
+
+        async function fetchBus() {
+            const url = `${apiBase}/Line/53/Arrivals?stopPointId=490014935S`;
+            const container = document.getElementById("bus-departures");
+            container.innerHTML = "Loading departures...";
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                const departures = data
+                    .sort((a, b) => a.timeToStation - b.timeToStation);
+
+                if (departures.length === 0) {
+                    container.innerHTML = "<p>No departures found.</p>";
+                } else {
+                    container.innerHTML = departures.map(dep =>
+                        `<p>Bus ${dep.lineName} to ${dep.destinationName} - in ${Math.round(dep.timeToStation / 60)} min</p>`
+                    ).join("");
+                }
+            } catch (error) {
+                console.error("Error fetching bus departures:", error);
+                container.innerHTML = `<p>Error fetching bus departures: ${error.message}</p>`;
+            }
+        }
+
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-GB', { hour12: false });
+            document.getElementById('current-time').textContent = timeString;
+        }
+
+ async function fetchServiceStatus() {
+    const url = `${apiBase}/Line/Mode/tube,dlr,overground,elizabeth-line,tram/Status`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+
+        const statusContainer = document.getElementById("status-details");
+        let statusHtml = '<div class="status-grid">';
+
+        function getStatusColor(status) {
+            return status === "Good Service" ? "green" : "yellow";
+        }
+
+        data.sort((a, b) => {
+            const statusA = a.lineStatuses[0].statusSeverityDescription;
+            const statusB = b.lineStatuses[0].statusSeverityDescription;
+            if (statusA === "Good Service" && statusB !== "Good Service") {
+                return 1;
+            } else if (statusA !== "Good Service" && statusB === "Good Service") {
+                return -1;
+            }
+            return 0;
+        });
+
+        data.forEach(line => {
+            const lineStatus = line.lineStatuses[0];
+            let statusSummary = lineStatus.statusSeverityDescription;
+            let lineColor = getLineColor(line.id);
+            let statusColor = getStatusColor(statusSummary);
+            let textColor = lineColor === '#000000' ? 'white' : 'black';
+
+            statusHtml += `
+         <div class="line-status">
+            <div style="background-color: ${lineColor}; color: ${textColor}; padding: 5px; border-radius: 5px; width: 50%; font-size: 1.3em; letter-spacing: ; text-transform:;">
+                ${line.name}
+            </div>
+            <span style="color: ${statusColor}; margin-left: 10px;">${statusSummary}</span>
+        </div>
+            `;
+        });
+
+        statusHtml += '</div>';
+        statusContainer.innerHTML = statusHtml;
+
+    } catch (error) {
+        console.error("Error fetching service status:", error);
+        document.getElementById("status-details").innerHTML = `<p>Error fetching service status: ${error.message}</p>`;
+    }
+}
+
+        function getLineColor(lineId) {
+            const lineColors = {
+	'bakerloo': '#B36305',
+        'central': '#DC241F',
+        'circle': '#FFCE00',
+        'district': '#00782E',
+        'dlr': '#1DB2AD',
+        'elizabeth': '#61399E',
+        'hammersmith-city': '#F689A6',
+        'jubilee': '#A0A5A9',
+        'liberty': '#61686B', // Assuming Overground color
+        'lioness': '#FFA602', // Assuming custom color
+        'metropolitan': '#9B0056',
+        'mildmay': '#026FE6', // Assuming Overground color
+        'northern': '#000000',
+        'piccadilly': '#003688',
+        'suffragette': '#18A95C', // Assuming Overground color
+        'tram': '#5EB526',
+        'victoria': '#009FE0',
+        'waterloo-city': '#76D0BD',
+        'weaver': '#EF6A14', // Assuming Overground color
+        'windrush': '#DC241F', // Assuming Overground color
+            };
+            return lineColors[lineId] || '#CCCCCC';
+        }
+
+        fetchElizabethLine();
+        fetchDLR();
+        fetchRail();
+        fetchBus();
+        updateTime();
+        fetchServiceStatus();
+
+        setInterval(fetchElizabethLine, 30000);
+        setInterval(fetchDLR, 30000);
+        setInterval(fetchRail, 30000);
+        setInterval(fetchBus, 30000);
+        setInterval(updateTime, 1000);
+        setInterval(fetchServiceStatus, 60000);
+    </script>
+</body>
+</html>
